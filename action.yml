@@ -105,7 +105,7 @@ runs:
           "Bash(gh pr review ${{ github.event.pull_request.number }} --approve:*),Bash(gh pr comment ${{ github.event.pull_request.number }} -b:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
           --max-turns 50
         prompt: |
-          Review this Dependabot PR (minor update).
+          Review this Dependabot PR (${{ steps.determine.outputs.update-type }} update).
 
           ## Review criteria
           - Check if CHANGELOG / release notes contain any breaking changes
@@ -145,7 +145,7 @@ runs:
           "Bash(gh pr comment ${{ github.event.pull_request.number }} -b:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
           --max-turns 50
         prompt: |
-          Review this Dependabot PR (major update or similar).
+          Review this Dependabot PR (${{ steps.determine.outputs.update-type }} update).
 
           ## Steps (follow this order)
           1. Run `gh pr diff ${{ github.event.pull_request.number }}` to fetch and review the diff
