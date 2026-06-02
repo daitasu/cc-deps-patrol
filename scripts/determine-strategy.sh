@@ -9,6 +9,8 @@ set -euo pipefail
 #   PATCH_STRATEGY    - Strategy for patch updates
 #   MINOR_STRATEGY    - Strategy for minor updates
 #   MAJOR_STRATEGY    - Strategy for major updates
+#   ANTHROPIC_API_KEY   - Anthropic API key (validated when review strategy is selected)
+#   CLAUDE_GITHUB_TOKEN - GitHub token for Claude Code Action (validated when review strategy is selected)
 #
 # Outputs (via $GITHUB_OUTPUT):
 #   strategy    - The resolved strategy name
@@ -46,6 +48,17 @@ case "$UPDATE_TYPE" in
     SEMVER_LEVEL="major"
     ;;
 esac
+
+if [[ "$STRATEGY" == "review-and-merge" || "$STRATEGY" == "review-only" ]]; then
+  if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
+    echo "::error::anthropic-api-key is required when using '${STRATEGY}' strategy"
+    exit 1
+  fi
+  if [[ -z "${CLAUDE_GITHUB_TOKEN:-}" ]]; then
+    echo "::error::claude-github-token is required when using '${STRATEGY}' strategy"
+    exit 1
+  fi
+fi
 
 echo "::notice::Dependabot update type: ${UPDATE_TYPE} (${SEMVER_LEVEL}) -> strategy: ${STRATEGY}"
 

@@ -79,6 +79,8 @@ runs:
         PATCH_STRATEGY: ${{ inputs.patch-strategy }}
         MINOR_STRATEGY: ${{ inputs.minor-strategy }}
         MAJOR_STRATEGY: ${{ inputs.major-strategy }}
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        CLAUDE_GITHUB_TOKEN: ${{ inputs.claude-github-token }}
 
     # ── 3a. auto-merge: approve + merge immediately ──
     - name: "Auto-merge: approve & merge"
