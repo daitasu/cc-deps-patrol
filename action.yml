@@ -10,19 +10,19 @@ inputs:
   patch-strategy:
     description: >
       Strategy for patch version updates.
-      One of: auto-merge, review-and-merge, review-only, none.
+      One of: auto-merge, verify-and-merge, review-and-merge, review-only, none.
     required: false
     default: "auto-merge"
   minor-strategy:
     description: >
       Strategy for minor version updates.
-      One of: auto-merge, review-and-merge, review-only, none.
+      One of: auto-merge, verify-and-merge, review-and-merge, review-only, none.
     required: false
     default: "review-and-merge"
   major-strategy:
     description: >
       Strategy for major version updates.
-      One of: auto-merge, review-and-merge, review-only, none.
+      One of: auto-merge, verify-and-merge, review-and-merge, review-only, none.
     required: false
     default: "review-only"
   github-token:
@@ -58,6 +58,9 @@ outputs:
   update-type:
     description: "The semver update level (patch, minor, major)."
     value: ${{ steps.determine.outputs.update-type }}
+  provenance-result:
+    description: "Supply-chain provenance check result: pass, warn, fail, or skip."
+    value: ${{ steps.provenance.outputs.provenance-result }}
 
 runs:
   using: "composite"
@@ -82,7 +85,23 @@ runs:
         ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
         CLAUDE_GITHUB_TOKEN: ${{ inputs.claude-github-token }}
 
-    # ── 3a. auto-merge: approve + merge immediately ──
+    # ── 3. Verify npm provenance (for strategies that use it) ──
+    - name: "Verify package provenance"
+      id: provenance
+      if: >-
+        steps.determine.outputs.strategy == 'verify-and-merge' ||
+        steps.determine.outputs.strategy == 'review-and-merge' ||
+        steps.determine.outputs.strategy == 'review-only'
+      shell: bash
+      run: ${{ github.action_path }}/scripts/verify-provenance.sh
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        DEPENDENCY_NAMES: ${{ steps.fetch-metadata.outputs.dependency-names }}
+        PACKAGE_ECOSYSTEM: ${{ steps.fetch-metadata.outputs.package-ecosystem }}
+        NEW_VERSION: ${{ steps.fetch-metadata.outputs.new-version }}
+        PREVIOUS_VERSION: ${{ steps.fetch-metadata.outputs.previous-version }}
+
+    # ── 4a. auto-merge: approve + merge immediately ──
     - name: "Auto-merge: approve & merge"
       if: steps.determine.outputs.strategy == 'auto-merge'
       shell: bash
@@ -91,7 +110,19 @@ runs:
         GH_TOKEN: ${{ inputs.github-token }}
         PR_URL: ${{ github.event.pull_request.html_url }}
 
-    # ── 3b. review-and-merge: AI review with approve permission ──
+    # ── 4b. verify-and-merge: merge if provenance check allows ──
+    - name: "Verify-and-merge: merge or report"
+      if: steps.determine.outputs.strategy == 'verify-and-merge'
+      shell: bash
+      run: ${{ github.action_path }}/scripts/verify-and-merge.sh
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        PR_URL: ${{ github.event.pull_request.html_url }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        PROVENANCE_RESULT: ${{ steps.provenance.outputs.provenance-result }}
+        PROVENANCE_REPORT: ${{ steps.provenance.outputs.provenance-report }}
+
+    # ── 4c. review-and-merge: AI review with approve permission ──
     - name: "AI Review (review-and-merge)"
       if: steps.determine.outputs.strategy == 'review-and-merge'
       uses: anthropics/claude-code-action@d59651bd82c48d81756854675ce4fa4d69722200 # v1
@@ -107,7 +138,11 @@ runs:
         prompt: |
           Review this Dependabot PR (${{ steps.determine.outputs.update-type }} update).
 
+          ## Supply Chain Trust Check (automated)
+          ${{ steps.provenance.outputs.provenance-report }}
+
           ## Review criteria
+          - Consider the supply-chain check results above — packages without provenance or with new install scripts carry higher risk
           - Check if CHANGELOG / release notes contain any breaking changes
           - Check for dependency version constraint conflicts
           - Verify that lockfile changes are valid
@@ -131,7 +166,7 @@ runs:
         PR_NUMBER: ${{ github.event.pull_request.number }}
         REVIEWER_LOGIN: ${{ inputs.reviewer-login }}
 
-    # ── 3c. review-only: AI review comment only (no merge) ──
+    # ── 4d. review-only: AI review comment only (no merge) ──
     - name: "AI Review (review-only)"
       if: steps.determine.outputs.strategy == 'review-only'
       uses: anthropics/claude-code-action@d59651bd82c48d81756854675ce4fa4d69722200 # v1
@@ -147,10 +182,14 @@ runs:
         prompt: |
           Review this Dependabot PR (${{ steps.determine.outputs.update-type }} update).
 
+          ## Supply Chain Trust Check (automated)
+          ${{ steps.provenance.outputs.provenance-report }}
+
           ## Steps (follow this order)
           1. Run `gh pr diff ${{ github.event.pull_request.number }}` to fetch and review the diff
           2. Run `gh pr view ${{ github.event.pull_request.number }}` to check the PR summary
           3. Review with the following criteria:
+             - Supply-chain trust signals (see above) — highlight any packages lacking provenance or with new install scripts
              - Breaking changes in CHANGELOG / release notes
              - Dependency version constraint conflicts
              - Incompatible API changes

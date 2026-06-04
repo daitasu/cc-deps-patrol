@@ -9,9 +9,20 @@ Uses [Claude Code Action](https://github.com/anthropics/claude-code-action) for 
 | Strategy | Behavior |
 |---|---|
 | `auto-merge` | Approve and merge immediately |
+| `verify-and-merge` | Check supply-chain trust signals, merge if passed |
 | `review-and-merge` | AI reviews the PR — merges if approved |
 | `review-only` | AI posts a review comment (no merge) |
 | `none` | Do nothing |
+
+> `verify-and-merge`, `review-and-merge`, and `review-only` all run an automated **supply-chain trust check** that verifies:
+>
+> | Signal | What it checks | Source |
+> |---|---|---|
+> | **npm provenance** | Sigstore attestation linking the package to its source repo and CI/CD build | npm registry attestation API |
+> | **Install scripts** | Newly added `postinstall` / `preinstall` / `install` scripts (common malware vector) | `npm view` |
+> | **Release age** | Days since the version was published (informational) | npm registry `time` field |
+>
+> For `verify-and-merge`, new install scripts will **block** the merge. Missing provenance triggers a warning but does not block on its own (adoption is still growing).
 
 ### Defaults
 
@@ -63,6 +74,19 @@ jobs:
           reviewer-login: "my-bot[bot]"
 ```
 
+### Supply-chain verified auto-merge (no AI, no API key needed)
+
+```yaml
+- uses: daitasu/cc-deps-patrol@v1
+  with:
+    github-token: ${{ steps.app-token.outputs.token }}
+    patch-strategy: "verify-and-merge"
+    minor-strategy: "verify-and-merge"
+    major-strategy: "review-only"
+    anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}     # only for review-only
+    claude-github-token: ${{ steps.app-token.outputs.token }}
+```
+
 ### Patch-only auto-merge (no AI review)
 
 ```yaml
@@ -108,8 +132,8 @@ jobs:
 | `minor-strategy` | No | `review-and-merge` | Strategy for minor updates |
 | `major-strategy` | No | `review-only` | Strategy for major updates |
 | `github-token` | **Yes** | - | GitHub token for approve/merge (e.g. GitHub App token or PAT) |
-| `anthropic-api-key` | No | `""` | Anthropic API key (required for review strategies) |
-| `claude-github-token` | No | `""` | GitHub token for Claude Code Action (required for review strategies) |
+| `anthropic-api-key` | No | `""` | Anthropic API key (required for `review-and-merge` / `review-only`) |
+| `claude-github-token` | No | `""` | GitHub token for Claude Code Action (required for `review-and-merge` / `review-only`) |
 | `claude-model` | No | `sonnet` | Claude model for AI review |
 | `reviewer-login` | No | `""` | Bot login name to check for approval (`review-and-merge` only) |
 | `review-language` | No | `en` | Language for AI review comments (`en`, `ja`, etc.) |
@@ -120,6 +144,7 @@ jobs:
 |---|---|
 | `strategy` | The strategy that was applied |
 | `update-type` | The semver update level (`patch`, `minor`, `major`) |
+| `provenance-result` | Supply-chain check result: `pass`, `warn`, `fail`, or `skip` |
 
 ## Required Permissions
 

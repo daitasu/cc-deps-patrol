@@ -16,7 +16,7 @@ set -euo pipefail
 #   strategy    - The resolved strategy name
 #   update-type - The semver level (patch, minor, major)
 
-VALID_STRATEGIES=("auto-merge" "review-and-merge" "review-only" "none")
+VALID_STRATEGIES=("auto-merge" "verify-and-merge" "review-and-merge" "review-only" "none")
 
 validate_strategy() {
   local name="$1"
