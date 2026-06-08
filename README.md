@@ -1,6 +1,6 @@
 # cc-deps-patrol
 
-A GitHub Composite Action that auto-merges Dependabot PRs with configurable strategies per semver level (patch / minor / major).
+A GitHub Composite Action that merges Dependabot PRs with configurable strategies per semver level (patch / minor / major). By default, patch updates are merged only after passing a supply-chain trust check (`verify-and-merge`).
 
 Uses [Claude Code Action](https://github.com/anthropics/claude-code-action) for AI-powered reviews.
 
@@ -28,7 +28,7 @@ Uses [Claude Code Action](https://github.com/anthropics/claude-code-action) for 
 
 | semver level | default strategy |
 |---|---|
-| patch | `auto-merge` |
+| patch | `verify-and-merge` |
 | minor | `review-and-merge` |
 | major | `review-only` |
 
@@ -68,7 +68,7 @@ jobs:
           github-token: ${{ steps.app-token.outputs.token }}
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude-github-token: ${{ steps.app-token.outputs.token }}
-          # patch-strategy: 'auto-merge'       # default
+          # patch-strategy: 'verify-and-merge'  # default
           # minor-strategy: 'review-and-merge'  # default
           # major-strategy: 'review-only'       # default
           reviewer-login: "my-bot[bot]"
@@ -128,7 +128,7 @@ jobs:
 
 | Name | Required | Default | Description |
 |---|---|---|---|
-| `patch-strategy` | No | `auto-merge` | Strategy for patch updates |
+| `patch-strategy` | No | `verify-and-merge` | Strategy for patch updates |
 | `minor-strategy` | No | `review-and-merge` | Strategy for minor updates |
 | `major-strategy` | No | `review-only` | Strategy for major updates |
 | `github-token` | **Yes** | - | GitHub token for approve/merge (e.g. GitHub App token or PAT) |

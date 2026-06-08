@@ -1,5 +1,5 @@
 name: "cc-deps-patrol"
-description: "Auto-merge Dependabot PRs with configurable strategies (auto-merge / AI review + merge / AI review only) per semver level."
+description: "Merge Dependabot PRs with configurable strategies (auto-merge / supply-chain verify + merge / AI review + merge / AI review only) per semver level."
 author: "daitasu"
 
 branding:
@@ -12,7 +12,7 @@ inputs:
       Strategy for patch version updates.
       One of: auto-merge, verify-and-merge, review-and-merge, review-only, none.
     required: false
-    default: "auto-merge"
+    default: "verify-and-merge"
   minor-strategy:
     description: >
       Strategy for minor version updates.
