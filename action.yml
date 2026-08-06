@@ -97,6 +97,7 @@ runs:
       env:
         GH_TOKEN: ${{ inputs.github-token }}
         DEPENDENCY_NAMES: ${{ steps.fetch-metadata.outputs.dependency-names }}
+        UPDATED_DEPENDENCIES_JSON: ${{ steps.fetch-metadata.outputs.updated-dependencies-json }}
         PACKAGE_ECOSYSTEM: ${{ steps.fetch-metadata.outputs.package-ecosystem }}
         NEW_VERSION: ${{ steps.fetch-metadata.outputs.new-version }}
         PREVIOUS_VERSION: ${{ steps.fetch-metadata.outputs.previous-version }}

@@ -14,6 +14,11 @@ set -euo pipefail
 #   GH_TOKEN           – GitHub token (unused here, but set in the env)
 #
 # Optional env vars:
+#   UPDATED_DEPENDENCIES_JSON – Per-dependency name/prevVersion/newVersion array
+#                               (from fetch-metadata).  Required to check the
+#                               versions the PR actually bumps to; without it
+#                               grouped PRs fall back to npm's "latest", which
+#                               is not what the PR contains.
 #   NEW_VERSION        – New version for single-dep PRs (from fetch-metadata)
 #   PREVIOUS_VERSION   – Previous version for single-dep PRs (from fetch-metadata)
 #
@@ -73,10 +78,31 @@ if ! command -v npm &>/dev/null; then
   exit 0
 fi
 
-# ── Parse dependency names ──
-IFS=', ' read -ra DEPS <<< "${DEPENDENCY_NAMES:-}"
+# ── Parse dependencies as "name<TAB>newVersion<TAB>prevVersion" rows ──
+# updated-dependencies-json carries the versions the PR actually bumps to, for
+# every dependency in the PR.  Grouped Dependabot PRs contain several
+# dependencies, so the single-dep NEW_VERSION / PREVIOUS_VERSION cannot cover
+# them.
+DEP_ROWS=$(printf '%s' "${UPDATED_DEPENDENCIES_JSON:-}" \
+  | jq -r '.[] | [.dependencyName, .newVersion // "", .prevVersion // ""] | @tsv' 2>/dev/null \
+  || true)
 
-if [[ ${#DEPS[@]} -eq 0 ]]; then
+# Fallback: names only.  Versions are known only when the PR has a single dep.
+if [[ -z "$DEP_ROWS" ]]; then
+  echo "::warning::updated-dependencies-json unavailable — falling back to dependency names"
+  IFS=', ' read -ra NAMES <<< "${DEPENDENCY_NAMES:-}"
+  # ${NAMES[@]} on an empty array trips `set -u` under bash 3.2, so guard it.
+  for name in ${NAMES[@]+"${NAMES[@]}"}; do
+    [[ -z "$name" ]] && continue
+    if [[ ${#NAMES[@]} -eq 1 ]]; then
+      DEP_ROWS+="${name}"$'\t'"${NEW_VERSION:-}"$'\t'"${PREVIOUS_VERSION:-}"$'\n'
+    else
+      DEP_ROWS+="${name}"$'\t'$'\t'$'\n'
+    fi
+  done
+fi
+
+if [[ -z "$DEP_ROWS" ]]; then
   echo "::warning::No dependency names provided — skipping"
   echo "provenance-result=skip" >> "$GITHUB_OUTPUT"
   DELIM="PROVENANCE_REPORT_$(date +%s)"
@@ -96,23 +122,20 @@ ISSUES=""
 TOTAL=0
 PROVENANCE_OK=0
 
-for dep in "${DEPS[@]}"; do
+while IFS=$'\t' read -r dep VERSION PREV_VERSION; do
   [[ -z "$dep" ]] && continue
   TOTAL=$((TOTAL + 1))
 
   echo "── Checking: ${dep} ──"
 
-  # ── Resolve version ──
-  if [[ -n "${NEW_VERSION:-}" ]] && [[ ${#DEPS[@]} -eq 1 ]]; then
-    VERSION="$NEW_VERSION"
-  else
-    VERSION=$(npm view "${dep}" version 2>/dev/null || echo "")
-  fi
-
+  # An unresolved version means the checks below would inspect some other
+  # release than the one this PR installs, so treat it as a blocking failure
+  # rather than merging on an unverified package.
   if [[ -z "$VERSION" ]]; then
-    echo "  ⚠️ Could not resolve version"
-    REPORT_ROWS+="| \`${dep}\` | - | ⚠️ Unknown | - | - |"$'\n'
-    [[ "$RESULT" == "pass" ]] && RESULT="warn"
+    echo "  🚫 Could not resolve the version this PR bumps to"
+    REPORT_ROWS+="| \`${dep}\` | - | 🚫 Unknown | - | - |"$'\n'
+    ISSUES+="- \`${dep}\`: could not determine the version this PR installs — checks did not run"$'\n'
+    RESULT="fail"
     continue
   fi
   echo "  Version: ${VERSION}"
@@ -143,8 +166,8 @@ for dep in "${DEPS[@]}"; do
 
   if [[ -n "$NEW_INSTALL" ]]; then
     # Check if these scripts existed in the previous version
-    if [[ -n "${PREVIOUS_VERSION:-}" ]] && [[ ${#DEPS[@]} -eq 1 ]]; then
-      OLD_SCRIPTS_JSON=$(npm view "${dep}@${PREVIOUS_VERSION}" scripts --json 2>/dev/null || echo "{}")
+    if [[ -n "$PREV_VERSION" ]]; then
+      OLD_SCRIPTS_JSON=$(npm view "${dep}@${PREV_VERSION}" scripts --json 2>/dev/null || echo "{}")
       OLD_INSTALL=$(install_scripts "$OLD_SCRIPTS_JSON")
 
       for script_name in $NEW_INSTALL; do
@@ -186,7 +209,7 @@ for dep in "${DEPS[@]}"; do
 
   # ── Build table row ──
   REPORT_ROWS+="| \`${dep}\` | ${VERSION} | ${PROV_LABEL} | ${SCRIPTS_LABEL} | ${AGE_LABEL} |"$'\n'
-done
+done <<< "$DEP_ROWS"
 
 echo "══════════════════"
 echo "Result: ${RESULT} (${PROVENANCE_OK}/${TOTAL} provenance verified)"

@@ -22,7 +22,9 @@ Uses [Claude Code Action](https://github.com/anthropics/claude-code-action) for 
 > | **Install scripts** | Newly added `postinstall` / `preinstall` / `install` scripts (common malware vector) | `npm view` |
 > | **Release age** | Days since the version was published (informational) | npm registry `time` field |
 >
-> For `verify-and-merge`, new install scripts will **block** the merge. Missing provenance triggers a warning but does not block on its own (adoption is still growing).
+> Every signal is checked against the exact version the PR bumps to, including in grouped Dependabot PRs.
+>
+> For `verify-and-merge`, new install scripts **block** the merge, and so does a dependency whose target version cannot be resolved — an unresolved version means the signals above never ran. Missing provenance triggers a warning but does not block on its own (adoption is still growing). Note that provenance proves a package was built in CI, not that it is safe: a hijacked maintainer account produces validly attested malicious releases, which is why the install-script signal is the blocking one.
 
 ### Defaults
 
